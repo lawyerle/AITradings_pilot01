@@ -16,6 +16,23 @@ import torch.optim as optim
 from dateutil.relativedelta import relativedelta
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
+# CSS to adjust the width of the sidebar and main content
+st.markdown(
+    """
+    <style>
+    /* Sidebar width */
+    [data-testid="stSidebar"] {
+        width: 500px;
+    }
+
+    /* Main content width */
+    .css-1d391kg {
+        max-width: 1000px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 company = ''
 end_date = ''
@@ -126,6 +143,8 @@ def get_market_data(code) :
 
 def data_preprocess(df_data) :
     global dfy
+    global dfx
+    global scaler
     # 데이터 전처리 작업 수행
     scaler = MinMaxScaler()
 
@@ -137,7 +156,7 @@ def data_preprocess(df_data) :
 
     dfx = df_data[features]
     scaled_data = scaler.fit_transform(dfx)
-    dfx = pd.DataFrame(scaled_data, columns=dfx.columns)
+    # dfx = pd.DataFrame(scaled_data, columns=dfx.columns)
     dfy = dfx[target]
     dfx = dfx[features]
 
@@ -218,7 +237,7 @@ def train_model(train_X, train_y, test_X, test_y) :
         test_y_tensor = torch.tensor(test_y, dtype=torch.float32)
         loss = criterion(pred_y, test_y_tensor)
 
-    print('loss : ', loss.item())
+    # print('loss : ', loss.item())
     mse = mean_squared_error(test_y, pred_y)
     mae = mean_absolute_error(test_y, pred_y)
     
@@ -228,29 +247,37 @@ def train_model(train_X, train_y, test_X, test_y) :
                 2. Mean Absolute Error : {mae}
                 """)
     
-    return pred_y
+    predict_df = dfx[features][-len(test_y):]
+    
+    numpy_array = pred_y.numpy()
+    predict_df['종가'][:] = np.squeeze(numpy_array)
+    predict_df[features] = scaler.inverse_transform(predict_df)
+    predict_df = predict_df.applymap(lambda x : int(x))
+
+    recent_df = df_ohlcv[features][-len(test_y):]
+    
+    return predict_df, recent_df
 
     # model.eval()  # 평가 모드로 전환
     # with torch.no_grad():
     #     pred_y = model(torch.tensor(test_X, dtype=torch.float32))
 
 def draw_graph(pred_y, test_y):
-    plt.figure()
-    plt.plot(test_y, color='red', label=f'{company_name} 실제 주가')
-    plt.plot(pred_y.numpy(), color='blue', label=f'{company_name} 예측 주가')
+    plt.rcParams.update({'font.size': 25})
+    plt.figure(figsize=(25,15))
+    plt.plot(test_y['종가'], color='red', label=f'{company_name} 실제 주가')
+    plt.plot(pred_y['종가'], color='blue', label=f'{company_name} 예측 주가')
     plt.title(f'{company_name} 주가 예측 그래프')
-    plt.xlabel('time')
+    plt.xlabel('date')
     plt.ylabel('stock price')
     plt.legend()
     
     return plt
 
 def write_estimate(pred_y):
-    pred_y_np = pred_y.numpy()
-    predict_value = df_ohlcv['종가'][-1] * pred_y_np[-1] / dfy['종가'].iat[-1]
     st.write(f"오늘 {company_name} 종가 :", df_ohlcv['종가'][-1], 'KRW')
-    st.write(f"내일 {company_name} 주가(예측) :", predict_value.item(), 'KRW')
-    sub_calc = predict_value.item() - df_ohlcv['종가'][-1]
+    st.write(f"내일 {company_name} 주가(예측) :", pred_y['종가'][-1], 'KRW')
+    sub_calc = pred_y['종가'][-1] - df_ohlcv['종가'][-1]
     st.write("증시 예상", '(상승)' if sub_calc >= 0  else '(하락)', ':', sub_calc, 'KRW' )
     
 if __name__ == '__main__' :
@@ -276,7 +303,7 @@ if __name__ == '__main__' :
             st.header(f'{company_name}({company_code}) 주가예측 결과')
             df_data = get_market_data(company_code)
             train_X, test_X, train_y, test_y = data_preprocess(df_data)
-            pred_y = train_model(train_X, train_y, test_X, test_y)
+            pred_y, test_y = train_model(train_X, train_y, test_X, test_y)
             st.pyplot(draw_graph(pred_y, test_y))
             write_estimate(pred_y)    
     except IndexError:
