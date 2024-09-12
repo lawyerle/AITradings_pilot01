@@ -1,0 +1,7 @@
+pykrx
+numpy<2
+pandas
+yfinance
+torch
+scikit-learn
+streamlit
