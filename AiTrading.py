@@ -109,12 +109,9 @@ def get_company_code(company_name):
 
 def get_market_data(code) :
     global df_ohlcv, start_date, end_date
-    print(start_date)
-    print(end_date)
       
     #주가의 OHLCV 값을 조회
     df_ohlcv = stock.get_market_ohlcv(start_date, end_date, code)
-    print(df_ohlcv.head())
     #일자별 DIV/BPS/PER/EPS를 조회
     #DIV : 배당
     #BPS : 주당 순자산가치
@@ -209,6 +206,9 @@ def train_model(train_X, train_y, test_X, test_y) :
 
     # 모델 학습
     model.train()  # 훈련 모드로 전환
+    progress_bar = st.empty()
+    status_txt = st.empty()
+    progress_bar.progress(0)
     for epoch in range(epochs):
         for i in range(0, len(train_X), batch_size):
             # 배치 데이터 가져오기
@@ -226,9 +226,14 @@ def train_model(train_X, train_y, test_X, test_y) :
             # 역전파 및 가중치 업데이트
             loss.backward()
             optimizer.step()
+        
+        progress_bar.progress((epoch+1)/epochs)
+        status_txt.text(f"학습 진행중 : {int((epoch+1)/epochs * 100)} %")
+        # print(f'Epoch [{epoch + 1}/{epochs}], Loss: {loss.item():.4f}')
 
-        print(f'Epoch [{epoch + 1}/{epochs}], Loss: {loss.item():.4f}')
-
+    progress_bar.empty()
+    status_txt.empty()
+    
     # 모델 평가
     model.eval()  # 평가 모드로 전환
     with torch.no_grad():
@@ -241,16 +246,26 @@ def train_model(train_X, train_y, test_X, test_y) :
     mse = mean_squared_error(test_y, pred_y)
     mae = mean_absolute_error(test_y, pred_y)
     
-    st.markdown(f" ***모델평가결과*** : [  MSE : {mse},   MAE : {mae}  ]")
+    st.markdown( f"""  
+            <div style="background-color: lightblue; padding: 10px; border-radius: 5px;">  
+                <h4>모델평가결과</h4>  
+                <p>[  MSE : {mse},   MAE : {mae}  ]</p>  
+            </div>  
+            """,  
+            unsafe_allow_html=True
+        )
+    # st.markdown(f" ***모델평가결과*** : [  MSE : {mse},   MAE : {mae}  ]")
     
-    predict_df = dfx[features][-len(test_y):]
+    # predict_df = dfx[features][-len(test_y):]
+    predict_df = dfx[features][-pred_y.shape[0]:]
     
     numpy_array = pred_y.numpy()
     predict_df['종가'][:] = np.squeeze(numpy_array)
     predict_df[features] = scaler.inverse_transform(predict_df)
     predict_df = predict_df.applymap(lambda x : int(x))
 
-    recent_df = df_ohlcv[features][-len(test_y):]
+    # recent_df = df_ohlcv[features][-len(test_y):]
+    recent_df = df_ohlcv[features][-pred_y.shape[0]:]
     
     return predict_df, recent_df
 
@@ -259,13 +274,13 @@ def train_model(train_X, train_y, test_X, test_y) :
     #     pred_y = model(torch.tensor(test_X, dtype=torch.float32))
 
 def draw_graph(pred_y, test_y):
-    plt.rcParams.update({'font.size': 25})
+    plt.rcParams.update({'font.size': 30})
     plt.figure(figsize=(25,15))
     plt.plot(test_y['종가'], color='red', label=f'{company_name} 실제 주가')
     plt.plot(pred_y['종가'], color='blue', label=f'{company_name} 예측 주가')
     plt.title(f'{company_name} 주가 예측 그래프')
-    plt.xlabel('date')
-    plt.ylabel('stock price')
+    plt.xlabel('일자')
+    plt.ylabel('주가')
     plt.legend()
     
     return plt
@@ -283,10 +298,7 @@ if __name__ == '__main__' :
     st.title("주식가격 예측 프로그램")
     st.sidebar.title('설정')
     
-    try:
-        company_name = st.sidebar.text_input("예측할 종목명을 입력하세요.")
-    except IndexError:
-        st.write("종목을 찾을 수가 없습니다.")
+    company_name = st.sidebar.text_input("예측할 종목명을 입력하세요.")
         
     learning_period = st.sidebar.radio("학습기간 : ", ["1년", "3년", "5년", "7년", "10년"])
     st.sidebar.subheader("Hyper Parameter: ")
@@ -300,8 +312,12 @@ if __name__ == '__main__' :
             calc_start_end_date() 
             company_code = get_company_code(company_name)
             st.header(f'{company_name}({company_code}) 주가예측 결과')
+            status_txt = st.empty()
+            status_txt.text("데이터 다운로드 중...")
             df_data = get_market_data(company_code)
+            status_txt.text("데이터 전처리 중...")
             train_X, test_X, train_y, test_y = data_preprocess(df_data)
+            status_txt.empty()
             pred_y, test_y = train_model(train_X, train_y, test_X, test_y)
             st.pyplot(draw_graph(pred_y, test_y))
             write_estimate(pred_y)    
