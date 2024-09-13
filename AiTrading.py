@@ -155,7 +155,7 @@ def data_preprocess(df_data) :
     # features.append('환율종가')
 
     dfx = df_data[features]
-    scaled_data = scaler.fit_transform(dfx)
+    dfx[features] = scaler.fit_transform(dfx)
     # dfx = pd.DataFrame(scaled_data, columns=dfx.columns)
     dfy = dfx[target]
     dfx = dfx[features]
@@ -241,11 +241,7 @@ def train_model(train_X, train_y, test_X, test_y) :
     mse = mean_squared_error(test_y, pred_y)
     mae = mean_absolute_error(test_y, pred_y)
     
-    st.markdown(f"""
-                **모델평가결과**
-                1. Mean Squared Error : {mse}
-                2. Mean Absolute Error : {mae}
-                """)
+    st.markdown(f" ***모델평가결과*** : [  MSE : {mse},   MAE : {mae}  ]")
     
     predict_df = dfx[features][-len(test_y):]
     
@@ -275,10 +271,13 @@ def draw_graph(pred_y, test_y):
     return plt
 
 def write_estimate(pred_y):
-    st.write(f"오늘 {company_name} 종가 :", df_ohlcv['종가'][-1], 'KRW')
-    st.write(f"내일 {company_name} 주가(예측) :", pred_y['종가'][-1], 'KRW')
     sub_calc = pred_y['종가'][-1] - df_ohlcv['종가'][-1]
-    st.write("증시 예상", '(상승)' if sub_calc >= 0  else '(하락)', ':', sub_calc, 'KRW' )
+    str_updown = '(상승)' if sub_calc >= 0  else '(하락)'
+    st.markdown(f"""
+                - 오늘 {company_name} 종가 :  {df_ohlcv['종가'][-1]} KRW
+                - 내일 {company_name} 주가(예측) : {pred_y['종가'][-1]} KRW
+                - 증시 예상 ***{str_updown}***: {sub_calc} KRW
+                """)
     
 if __name__ == '__main__' :
     st.title("주식가격 예측 프로그램")
